@@ -76,8 +76,8 @@ func (av *AddressValidator) ValidateAddress(address Address) ([]TokenisedAddress
 		}
 	}
 
-	if len(rankedAddresses) == 1 {
-		return rankedAddresses, nil
+	if len(filteredAddresses) == 1 {
+		return filteredAddresses, nil
 	}
 
 	lowestClosePenalty := rankedAddresses[0].ClosePenalty
@@ -207,9 +207,9 @@ func (av *AddressValidator) splitString(toSplit string) []string {
 
 func main() {
 	add := Address{
-		LineOne:   "Flat 25",     //", flat 5 69 sea road",
-		LineTwo:   "Rose xTower", //"boscombe, bournemouth",
-		LineThree: "",
+		LineOne:   "Flat 12",    //", flat 5 69 sea road",
+		LineTwo:   "Rose Tower", //"boscombe, bournemouth",
+		LineThree: "62 Clarence Parade",
 		Postcode:  "PO5 2HX",
 	}
 
@@ -221,6 +221,7 @@ func main() {
 		return
 	}
 
+	fmt.Println(len(addresses))
 	for _, add := range addresses {
 		b, _ := json.MarshalIndent(add, "", "    ")
 		fmt.Println(string(b))
