@@ -30,11 +30,12 @@ type Address struct {
 
 // TokenisedAddress holds the address and the scoring
 type TokenisedAddress struct {
-	Address      *Address
-	Score        int
-	ClosePenalty int
-	Tokens       []string
-	Matches      []string
+	Address       *Address
+	Score         int
+	ClosePenalty  int
+	Tokens        []string
+	PrimaryTokens []string
+	Matches       []string
 }
 
 // AddressValidator the main struct for validating addresses
@@ -61,7 +62,30 @@ func (av *AddressValidator) ValidateAddress(address Address) ([]TokenisedAddress
 
 	rankedAddresses := av.rankAddresses(address)
 
-	return rankedAddresses, nil
+	// only one address or no addresses
+	if len(rankedAddresses) < 2 {
+		return rankedAddresses, nil
+	}
+
+	// remove all but the highest ranked
+	highestScore := rankedAddresses[0].Score
+	var filteredAddresses []TokenisedAddress
+	for _, add := range rankedAddresses {
+		if add.Score == highestScore {
+			filteredAddresses = append(filteredAddresses, add)
+		}
+	}
+
+	if len(rankedAddresses) == 1 {
+		return rankedAddresses, nil
+	}
+
+	lowestClosePenalty := rankedAddresses[0].ClosePenalty
+	if lowestClosePenalty < rankedAddresses[1].ClosePenalty {
+		return []TokenisedAddress{rankedAddresses[0]}, nil
+	}
+
+	return []TokenisedAddress{}, nil
 }
 
 func (av *AddressValidator) rankAddresses(address Address) []TokenisedAddress {
@@ -70,25 +94,23 @@ func (av *AddressValidator) rankAddresses(address Address) []TokenisedAddress {
 	for i := range av.tokenisedAddress {
 		tokenCount := len(av.tokenisedAddress[i].Tokens)
 		checkAddress := &av.tokenisedAddress[i]
-		// What if one has more items than the other
-		// compare each item in address and check address
-		// most matches wins
-		// Maybe record the matched items
-		// percentage score
-		// need a filtering system to break up things
-		// like 47a
 		matchCount := 0
+		score := 0
 		for _, token := range checkAddress.Tokens {
-			for j := range tokenisedCheck.Tokens {
-				if tokenisedCheck.Tokens[j] == token {
-					matchCount++
-					checkAddress.Matches = append(checkAddress.Matches, token)
+
+			if av.inArray(tokenisedCheck.Tokens, token) {
+				matchCount++
+				checkAddress.Matches = append(checkAddress.Matches, token)
+				if av.inArray(checkAddress.PrimaryTokens, token) {
+					score = score + 2
+				} else {
+					score++
 				}
 			}
 		}
 
 		checkAddress.ClosePenalty = int(math.Abs(float64(matchCount - tokenCount)))
-		checkAddress.Score = matchCount // maybe a percentage
+		checkAddress.Score = score // maybe a percentage
 	}
 
 	// Sort by score then by close penalty
@@ -103,6 +125,15 @@ func (av *AddressValidator) rankAddresses(address Address) []TokenisedAddress {
 	})
 
 	return av.tokenisedAddress
+}
+
+func (av *AddressValidator) inArray(haystack []string, needle string) bool {
+	for _, item := range haystack {
+		if needle == item {
+			return true
+		}
+	}
+	return false
 }
 
 func (av *AddressValidator) getAddressData(postcode string) ([]Address, error) {
@@ -130,10 +161,27 @@ func (av *AddressValidator) tokeniseAddress(address Address) TokenisedAddress {
 		address.LineTwo,
 		address.LineThree}, " ")
 
-	combined = strings.ToLower(combined)
+	buildingName := av.splitString(address.BuildingName)
+	buildingNumber := av.splitString(address.BuildingNumber)
+	subBuildingName := av.splitString(address.SubBuildingName)
 
+	primaryTokens := append(buildingName, buildingNumber...)
+	primaryTokens = append(primaryTokens, subBuildingName...)
+
+	filteredTokens := av.splitString(combined)
+
+	return TokenisedAddress{
+		Address:       &address,
+		Tokens:        filteredTokens,
+		PrimaryTokens: primaryTokens,
+	}
+}
+
+func (av *AddressValidator) splitString(toSplit string) []string {
 	reg, _ := regexp.Compile("[^a-zA-Z0-9 ]+")
-	combined = reg.ReplaceAllString(combined, "")
+	combined := reg.ReplaceAllString(toSplit, "")
+
+	combined = strings.ToLower(combined)
 
 	tokens := strings.Split(combined, " ")
 
@@ -154,27 +202,14 @@ func (av *AddressValidator) tokeniseAddress(address Address) TokenisedAddress {
 
 	sort.Strings(filteredTokens)
 
-	return TokenisedAddress{
-		Address: &address,
-		Tokens:  filteredTokens,
-	}
+	return filteredTokens
 }
 
-/*
-add weightings these should be higher
-5's
-building_number
-building_name
-sub_building_name 12a both components are important
-
-thoroughfare
-
-*/
 func main() {
 	add := Address{
-		LineOne:   "Flat 20",    //", flat 5 69 sea road",
-		LineTwo:   "Rose Tower", //"boscombe, bournemouth",
-		LineThree: "62 clarence parade",
+		LineOne:   "Flat 25",     //", flat 5 69 sea road",
+		LineTwo:   "Rose xTower", //"boscombe, bournemouth",
+		LineThree: "",
 		Postcode:  "PO5 2HX",
 	}
 
@@ -187,7 +222,8 @@ func main() {
 	}
 
 	for _, add := range addresses {
-		fmt.Printf("%s\t%s\t%s\t%d\t%d\t%d\n", add.Address.LineOne, add.Address.LineTwo, add.Address.LineThree, add.Score, len(add.Tokens), add.ClosePenalty)
+		b, _ := json.MarshalIndent(add, "", "    ")
+		fmt.Println(string(b))
 	}
 
 }
