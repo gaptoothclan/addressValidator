@@ -17,7 +17,7 @@ type IdealPostCode struct {
 //
 func (i IdealPostCode) GetAddressData(postcode string) ([]Address, error) {
 	url := fmt.Sprintf(IDEAL_POSTCODE_URL, postcode, i.ApiKey)
-	fmt.Println(url)
+
 	response, err := http.Get(url)
 
 	defer response.Body.Close()
@@ -27,13 +27,13 @@ func (i IdealPostCode) GetAddressData(postcode string) ([]Address, error) {
 	}
 
 	contents, _ := ioutil.ReadAll(response.Body)
-	fmt.Println(contents)
+
 	var result AddressResult
 	jsonErr := json.Unmarshal(contents, &result)
-	fmt.Println(jsonErr)
+
 	if jsonErr != nil {
 		return nil, jsonErr
 	}
-	fmt.Println(result)
+
 	return result.Result, nil
 }
