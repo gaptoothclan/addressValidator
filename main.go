@@ -10,6 +10,34 @@ import (
 	"strings"
 )
 
+//
+type AddressProvider interface {
+	GetAddressData(postcode string) ([]Address, error)
+}
+
+//
+type FlatFileAddressProvider struct{}
+
+//
+func (f FlatFileAddressProvider) GetAddressData(postcode string) ([]Address, error) {
+	postcode = strings.ToLower(postcode)
+	postcode = strings.Replace(postcode, " ", "", -1)
+	filename := fmt.Sprintf("./%s.json", postcode)
+
+	file, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	addressResult := AddressResult{}
+	err = json.Unmarshal(file, &addressResult)
+	if err != nil {
+		return nil, err
+	}
+
+	return addressResult.Result, nil
+}
+
 // AddressResult Holds an address result from ideal postcodes
 type AddressResult struct {
 	Result  []Address `json:"result"`
@@ -49,8 +77,8 @@ func NewAddressValidator() *AddressValidator {
 }
 
 // ValidateAddress entry point
-func (av *AddressValidator) ValidateAddress(address Address) ([]TokenisedAddress, error) {
-	addresses, err := av.getAddressData(address.Postcode)
+func (av *AddressValidator) ValidateAddress(address Address, addressProvider AddressProvider) ([]TokenisedAddress, error) {
+	addresses, err := addressProvider.GetAddressData(address.Postcode)
 	if err != nil {
 		return nil, err
 	}
@@ -136,25 +164,6 @@ func (av *AddressValidator) inArray(haystack []string, needle string) bool {
 	return false
 }
 
-func (av *AddressValidator) getAddressData(postcode string) ([]Address, error) {
-	postcode = strings.ToLower(postcode)
-	postcode = strings.Replace(postcode, " ", "", -1)
-	filename := fmt.Sprintf("./%s.json", postcode)
-
-	file, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	addressResult := AddressResult{}
-	err = json.Unmarshal(file, &addressResult)
-	if err != nil {
-		return nil, err
-	}
-
-	return addressResult.Result, nil
-}
-
 func (av *AddressValidator) tokeniseAddress(address Address) TokenisedAddress {
 	combined := strings.Join([]string{
 		address.LineOne,
@@ -213,8 +222,9 @@ func main() {
 		Postcode:  "PO5 2HX",
 	}
 
+	ap := FlatFileAddressProvider{}
 	av := NewAddressValidator()
-	addresses, err := av.ValidateAddress(add)
+	addresses, err := av.ValidateAddress(add, ap)
 
 	if err != nil {
 		fmt.Print(err)
